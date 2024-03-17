@@ -47,15 +47,17 @@ module AthenaCore
     output logic HS,
     output logic DISP,
     output logic PIX_CLK,
-	 output logic CE_PIXEL,
+    output logic CE_PIXEL,
 
     //sound output
     output wire signed [15:0] snd1,
     output wire signed [15:0] snd2,
-    output wire sample
+    output wire sample,
+
+    bus_if      ym3256
 );
     logic VRD, AE, BE;
-    
+
     logic CK0, CK0n, CK1, CK1n, LDn;
     logic HLDn;
     (* keep *) logic [8:0] H;
@@ -76,12 +78,12 @@ module AthenaCore
 
     //CPU A data bus (tri-state)
     logic  [7:0] AD;
-    
+
     //common buses
     logic [7:0] VD_out, VD_in;
     logic [12:0] VA;
 
-    //Video Registers and CS 
+    //Video Registers and CS
     logic FRONT_VIDEO_CSn;
     logic SIDE_VRAM_CSn;
     logic DISC;
@@ -100,7 +102,7 @@ module AthenaCore
     logic B1Y8; //BACK1 tile layer scroll Y MSB
     logic FX8;  //FRONT tile layer scroll X MSB
     logic FY8;  //FRONT tile layer scroll Y MSB
-    
+
     //IO devices
     logic COIN;
     logic P1;
@@ -134,9 +136,9 @@ module AthenaCore
         .clk_4_cen(clk_4_cen),
         .clk_4b_cen(clk_4b_cen)
     );
-    
+
     assign player_ctrl_clk = clk_3p35_cen;
-	 assign CE_PIXEL = clk_6p7_cen; 
+	 assign CE_PIXEL = clk_6p7_cen;
 
 TNKIIICore_Clocks_Sync amc_clocks_sync(
     .clk(i_clk), //53.6
@@ -232,7 +234,7 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .VRDn(VRD),
         .AE(AE), //cpuA Enable
         .BE(BE), //cpuB Enable
-        
+
         //CPU A data bus
         .CPUAD(CPUAD),
         .CPUA_RD(CPUA_RD),
@@ -243,12 +245,12 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         //common data bus
         .V_out(VD_in), //exchange buses
         .V_in(VD_out),
-        
+
         //hps_io rom interface
         .ioctl_addr(ioctl_addr[19:0]),
         .ioctl_wr(ioctl_wr),
         .ioctl_data(ioctl_data),
-        
+
         //IO devices
         .SND_BUSY(SND_BUSY),
         .COIN(COIN),
@@ -288,7 +290,9 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .MS(SND_BUSY),
         .snd1(snd1),
         .snd2(snd2),
-        .sample(sample)
+        .sample(sample),
+
+        .ym3256
     );
 
     //Video Attributes
@@ -370,7 +374,7 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .VFLGn(VFLGn),
         .H8(H[8]),
         .Y(Y[7:3]), //Y[7:3] in schematics
-        .X(X), 
+        .X(X),
 
     //side SRAM control
         .VRD(VRD),
@@ -428,10 +432,10 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .H2(H[2]),
         .H1(H[1]),
         .H0(H[0]),
-        .X(X), 
+        .X(X),
         .VA(VA),
         .BACK1_VRAM_CSn(BACK1_VRAM_CSn),
-        
+
         //A address
         .VFLGn(VFLGn),
 
@@ -452,7 +456,7 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .B1_COLBK(1'b0), //NOT USED
         .B1D(B1D[7:0])
     );
-    
+
     logic [7:0] FD;
     logic [8:0] FL_Y;
     logic [7:0] front_vout;

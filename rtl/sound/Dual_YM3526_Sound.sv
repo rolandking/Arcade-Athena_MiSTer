@@ -23,7 +23,9 @@ module Dual_YM3526_Sound
     // combined output
     output  wire signed [15:0] snd1,
     output  wire signed [15:0] snd2,
-    output  wire sample
+    output  wire sample,
+
+    bus_if  ym3256
 );
     logic [7:0] latch_din;
 
@@ -141,7 +143,7 @@ module Dual_YM3526_Sound
 
     logic CS_ROM_0n, CS_ROM_1n, CS_ROM_2n, CS_RAMn;
 
-  
+
     logic F4_2_Y3n;
     ttl_74139_nodly F4_2(.Enable_bar(1'b0), .A_2D(A[15:14]), .Y_2D({F4_2_Y3n, CS_ROM_2n, CS_ROM_1n, CS_ROM_0n}));
 
@@ -163,6 +165,7 @@ module Dual_YM3526_Sound
     logic [7:0] data_ROM1;
     logic [7:0] data_ROM2;
 
+    /*
     eprom_16K ROM0
     (
         .ADDR(A[13:0]),
@@ -174,7 +177,7 @@ module Dual_YM3526_Sound
         .CS_DL(ROM0_cs),
         .WR(ioctl_wr)
     );
-    
+
     //In Athena PCB there are one 16Kb EPROM and one 32Kb EPROM
     eprom_16K ROM1
     (
@@ -200,12 +203,29 @@ module Dual_YM3526_Sound
         .WR(ioctl_wr)
     );
     //---------------------------------
+    */
 
     //--- HM6116-4 2Kx8 200ns SRAM ---
     assign CS_RAMn = A[13] | F4_2_Y3n;
     logic [7:0] RAM_dout;
+    /*
     SRAM_sync_noinit #(.ADDR_WIDTH(11)) f1(.ADDR(A[10:0]), .clk(clk), .cen(~CS_RAMn), .we(~nWR), .DATA(cpu_dout), .Q(RAM_dout));
     //--------------------------------
+    */
+
+    // send ROM and RAM up to the cram
+    // to make fewer changes, re-assign the rd_data to all the ROM and RAM data outs
+    always_comb begin
+        ym3256.addr    = A;
+        ym3256.wr_data = cpu_dout;
+        ym3256.wr      = ~nWR;
+        ym3256.rd      = ~nRD;
+
+        RAM_dout     = ym3256.rd_data;
+        data_ROM0    = ym3256.rd_data;
+        data_ROM1    = ym3256.rd_data;
+        data_ROM2    = ym3256.rd_data;
+    end
 
     //Sound CPU data input MUX
     logic SOUND_STATUS_R, SOUND_STATUS_W;
@@ -218,11 +238,11 @@ module Dual_YM3526_Sound
             else if(!CS_ROM_1n        && !nRD)                  cpu_din <= data_ROM1;    //0x4000-0x7fff
             else if(!CS_ROM_2n        && !nRD)                  cpu_din <= data_ROM2;    //0x8000-0xbfff
             else if(!CS_RAMn          && !nRD)                  cpu_din <= RAM_dout;     //0xc000-0xcfff
-            else if(!LATCH_MCODEn     && !nRD)                  cpu_din <= latch_din;    //0xE000                                  
+            else if(!LATCH_MCODEn     && !nRD)                  cpu_din <= latch_din;    //0xE000
             else if(!YM3526_CSn1      && !YM3526_RDn1)          cpu_din <= ym3526_dout1; //0xE800
             else if(!YM3526_CSn2      && !YM3526_RDn2)          cpu_din <= ym3526_dout2; //0xF000
             else if(!SOUND_STATUS_R)                            cpu_din <= {4'hf,STATUS_r};     //0xF800 //LSB FOUR BITS, remaing all 0
-            else                                                cpu_din <= 8'hFF;        
+            else                                                cpu_din <= 8'hFF;
         //end
     end
     //--------------------------------
@@ -233,7 +253,7 @@ module Dual_YM3526_Sound
     logic JK_YM3526_IRQ1_STATUS, JK_YM3526_IRQ1, JK_YM3526_IRQ2_STATUS, JK_YM3526_IRQ2;
     ttl_74107a_sync #(.BLOCKS(1)) JK_YM3526_IRQ1ic (.Reset_n(VIDEO_RSTn), .CLRn(JK_YM1_ACK), .J(1'b1), .K(1'b0), .Clk(clk), .Cen(YM3526_IRQn1), .Q(JK_YM3526_IRQ1_STATUS), .Qn(JK_YM3526_IRQ1));
     ttl_74107a_sync #(.BLOCKS(1)) JK_YM3526_IRQ2ic (.Reset_n(VIDEO_RSTn), .CLRn(JK_YM2_ACK), .J(1'b1), .K(1'b0), .Clk(clk), .Cen(YM3526_IRQn2), .Q(JK_YM3526_IRQ2_STATUS), .Qn(JK_YM3526_IRQ2));
-    
+
     logic DFF_CPU_BUSY_ACK;
     logic DFF_CMD_IRQ_ACK;
     logic CPU_BUSY, CMD_IRQ;
@@ -247,7 +267,7 @@ module Dual_YM3526_Sound
         .qn(CPU_BUSY),
         .set(1'b0),
         .clr(~DFF_CPU_BUSY_ACK),
-        .cen(MCODE) 
+        .cen(MCODE)
     );
 
      DFF_pseudoAsyncClrPre2 #(.W(1)) CMD_IRQic (
@@ -258,7 +278,7 @@ module Dual_YM3526_Sound
         .qn(CMD_IRQ),
         .set(1'b0),
         .clr(~DFF_CMD_IRQ_ACK),
-        .cen(MCODE) 
+        .cen(MCODE)
     );
 
     assign nINT = (JK_YM3526_IRQ1 & JK_YM3526_IRQ2 & CPU_BUSY & CMD_IRQ);
@@ -277,7 +297,7 @@ module Dual_YM3526_Sound
     //         DFF_CPU_BUSY_ACK <= 1'b1;
     //         DFF_CMD_IRQ_ACK  <= 1'b1;
     //     end
-    // end  
+    // end
 
     assign {DFF_CMD_IRQ_ACK,DFF_CPU_BUSY_ACK,JK_YM2_ACK,JK_YM1_ACK} = (!SOUND_STATUS_W) ? cpu_dout[7:4] : 4'hf;
 
@@ -287,7 +307,7 @@ module Dual_YM3526_Sound
     logic [3:0] STATUS_r;
     always @(posedge clk) begin
         if (!SOUND_STATUS_R) STATUS_r <= {CMD_IRQ_STATUS, CPU_BUSY_STATUS, JK_YM3526_IRQ2_STATUS, JK_YM3526_IRQ1_STATUS};
-        else                 STATUS_r <= 4'hf;      
+        else                 STATUS_r <= 4'hf;
     end
 
     //-------------------------------
@@ -307,10 +327,10 @@ module Dual_YM3526_Sound
     //     if(!VIDEO_RSTn) F8_Q_r <= 8'b0;
     //     else F8_Q_r <= F8_Q;
     // end
-   
+
     always @(posedge clk) begin
         if(!LATCH_MCODEn) latch_din <= F8_Q;
         else              latch_din <= 8'hFF;
-    end     
+    end
     //----------------------------
 endmodule
