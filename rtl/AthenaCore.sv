@@ -54,9 +54,11 @@ module AthenaCore
     output wire signed [15:0] snd2,
     output wire sample,
 
-    bus_if      ym3256
+    bus_if                    ym3256,
+    output athena::side_ram_t side_ram_monitor,
+    input  athena::side_ram_t side_ram_in
 );
-    logic VRD, AE, BE;
+    logic VRD, VRD_mon, AE, BE;
 
     logic CK0, CK0n, CK1, CK1n, LDn;
     logic HLDn;
@@ -71,8 +73,8 @@ module AthenaCore
     logic LT;
     logic VLK;
     logic VFLGn;
-    logic VDG, V_C;
-    logic VWE, VOE;
+    logic VDG, VDG_mon, V_C;
+    logic VWE, VWE_mon, VOE, VOE_mon;
     logic BWA, A_B, RLA, RLB, WBA, WBB;
     logic LA, LC, LD, HD8;
 
@@ -80,12 +82,12 @@ module AthenaCore
     logic  [7:0] AD;
 
     //common buses
-    logic [7:0] VD_out, VD_in;
-    logic [12:0] VA;
+    logic [7:0] VD_out, VD_in, VD_in_mon;
+    logic [12:0] VA, VA_mon;
 
     //Video Registers and CS
     logic FRONT_VIDEO_CSn;
-    logic SIDE_VRAM_CSn;
+    logic SIDE_VRAM_CSn, SIDE_VRAM_CSn_mon;
     logic DISC;
     logic MSB; //Video Attribs.
     logic FSX; //Front video scroll X
@@ -182,15 +184,15 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
     .VSYNC(VSYNC),
     .LT(LT),
     //
-    .VWE(VWE),
-    .VOE(VOE),
+    .VWE(VWE_mon),
+    .VOE(VOE_mon),
     .BWA(BWA),
     .A_B(A_B),
     .RLA(RLA),
     .RLB(RLB),
     .WBA(WBA),
     .WBB(WBB),
-    .VDG(VDG),
+    .VDG(VDG_mon),
     .VLK(VLK),
     .V_C(V_C),
     .VFLGn(VFLGn),
@@ -231,7 +233,7 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .WBB(WBB),
         .VDG(VDG),
         //outputs
-        .VRDn(VRD),
+        .VRDn(VRD_mon),
         .AE(AE), //cpuA Enable
         .BE(BE), //cpuB Enable
 
@@ -241,9 +243,9 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
         .CPUA_WR(CPUA_WR),
 
         //common address bus
-        .VA(VA),
+        .VA(VA_mon),
         //common data bus
-        .V_out(VD_in), //exchange buses
+        .V_out(VD_in_mon), //exchange buses
         .V_in(VD_out),
 
         //hps_io rom interface
@@ -263,7 +265,7 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
 
         //video devices
         .FRONT_VIDEO_CSn(FRONT_VIDEO_CSn),
-        .SIDE_VRAM_CSn(SIDE_VRAM_CSn),
+        .SIDE_VRAM_CSn(SIDE_VRAM_CSn_mon),
         .DISC(DISC),
         .MSB(MSB), //Video Attribs.
         .FSX(FSX), //Front video scroll X
@@ -568,4 +570,31 @@ TNKIIICore_Clocks_Sync amc_clocks_sync(
     assign SCR_X = X;
     assign SCR_Y = {H[8],Y[7:3],H[2:0]};
     assign PIX_CLK = CK1;
+
+    always_comb begin
+        // Source AthenaCore_CPU_A_B_Sync
+        side_ram_monitor.addr     = VA_mon;
+        side_ram_monitor.data_in  = VD_in_mon;
+        side_ram_monitor.nCS      = SIDE_VRAM_CSn_mon;
+        side_ram_monitor.VRD      = VRD_mon;
+
+        // source TNKIIICore_Clocks_Sync
+        side_ram_monitor.nWE      = VWE_mon;
+        side_ram_monitor.VDG      = VDG_mon;
+        side_ram_monitor.VOE      = VOE_mon;
+
+        // AthenaCore_Side_sync
+        side_ram_monitor.data_out = side_vout;
+
+        VA            = side_ram_in.addr;
+        VD_in         = side_ram_in.data_in;
+        SIDE_VRAM_CSn = side_ram_in.nCS;
+        VRD           = side_ram_in.VRD;
+
+        // source TNKIIICore_Clocks_Sync
+        VWE           = side_ram_in.nWE;
+        VDG           = side_ram_in.VDG;
+        VOE           = side_ram_in.VOE;
+
+    end
 endmodule
